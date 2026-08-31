@@ -1,73 +1,169 @@
 // API = receives/handles requests
 // Database = persistently stores the data
 
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var connectionString = builder.Configuration.GetConnectionString("Supabase");
+
 var app = builder.Build();
 
 
-var countries = new List<Country>
-{
-    new Country { Id = 1, Name = "Algeria", Capital = "Algiers" },
-    new Country { Id = 2, Name = "Japan", Capital = "Tokyo" },
-    new Country { Id = 3, Name = "Canada", Capital = "Ottawa" }
-};
+// var countries = new List<Country>
+// {
+//     new Country { Id = 1, Name = "Algeria", Capital = "Algiers" },
+//     new Country { Id = 2, Name = "Japan", Capital = "Tokyo" },
+//     new Country { Id = 3, Name = "Canada", Capital = "Ottawa" }
+// };
 
-app.MapGet("/countries/", () => {
-    return countries;
+app.MapGet("/countries", async () =>
+{
+    var countriesFromDb = new List<Country>();
+
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+
+    await using var command = new NpgsqlCommand(
+        "SELECT id, name, capital FROM countries ORDER BY id",
+        connection
+    );
+
+    await using var reader = await command.ExecuteReaderAsync();
+
+    while (await reader.ReadAsync())
+    {
+        countriesFromDb.Add(new Country
+        {
+            Id = reader.GetInt64(0),
+            Name = reader.GetString(1),
+            Capital = reader.GetString(2)
+        });
+    }
+
+    return Results.Ok(countriesFromDb);
 });
 
 //Will turn into JSON when returned from the endpoint (serialisation)
-app.MapGet("/countries/{id}", (int id) => {
-    var country = countries.FirstOrDefault(country => country.Id == id);
+app.MapGet("/countries/{id}", async (long id) =>
+{
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
 
-    if (country == null)
+    await using var command = new NpgsqlCommand(
+        "SELECT id, name, capital FROM countries WHERE id = @id",
+        connection
+    );
+
+    command.Parameters.AddWithValue("id", id);
+
+    await using var reader = await command.ExecuteReaderAsync();
+
+    if (!await reader.ReadAsync())
     {
         return Results.NotFound();
     }
+
+    var country = new Country
+    {
+        Id = reader.GetInt64(0),
+        Name = reader.GetString(1),
+        Capital = reader.GetString(2)
+    };
 
     return Results.Ok(country);
 });
 
 //ASP.NET will automatically bind the JSON body of the request to the newCountry parameter
-app.MapPost("/countries", (Country newCountry) =>
+app.MapPost("/countries", async (Country newCountry) =>
 {
-    newCountry.Id = countries.Max(country => country.Id) + 1;
-    countries.Add(newCountry);
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
 
-    return Results.Created($"/countries/{newCountry.Id}", newCountry);
+    await using var command = new NpgsqlCommand(
+        """
+        INSERT INTO countries (name, capital)
+        VALUES (@name, @capital)
+        RETURNING id, name, capital
+        """,
+        connection
+    );
+
+    command.Parameters.AddWithValue("name", newCountry.Name);
+    command.Parameters.AddWithValue("capital", newCountry.Capital);
+
+    await using var reader = await command.ExecuteReaderAsync();
+
+    await reader.ReadAsync();
+
+    var createdCountry = new Country
+    {
+        Id = reader.GetInt64(0),
+        Name = reader.GetString(1),
+        Capital = reader.GetString(2)
+    };
+
+    return Results.Created($"/countries/{createdCountry.Id}", createdCountry);
 });
 
-//Update an existing country by ID
-app.MapPut("/countries/{id}", (int id, Country updatedCountry) =>
+app.MapPut("/countries/{id}", async (long id, Country updatedCountry) =>
 {
-    var country = countries.FirstOrDefault(country => country.Id == id);
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
 
-    if (country == null)
+    await using var command = new NpgsqlCommand(
+        """
+        UPDATE countries
+        SET name = @name, capital = @capital
+        WHERE id = @id
+        RETURNING id, name, capital
+        """,
+        connection
+    );
+
+    command.Parameters.AddWithValue("id", id);
+    command.Parameters.AddWithValue("name", updatedCountry.Name);
+    command.Parameters.AddWithValue("capital", updatedCountry.Capital);
+
+    await using var reader = await command.ExecuteReaderAsync();
+
+    if (!await reader.ReadAsync())
     {
         return Results.NotFound();
     }
 
-    country.Name = updatedCountry.Name;
-    country.Capital = updatedCountry.Capital;
+    var country = new Country
+    {
+        Id = reader.GetInt64(0),
+        Name = reader.GetString(1),
+        Capital = reader.GetString(2)
+    };
 
     return Results.Ok(country);
 });
 
-
-app.MapDelete("/countries/{id}", (int id) =>
+app.MapDelete("/countries/{id}", async (long id) =>
 {
-    //Find the country with this ID
-    var country = countries.FirstOrDefault(country => country.Id == id);
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
 
-    //If it doesn't exist → 404
-    if (country == null)
+    await using var command = new NpgsqlCommand(
+        """
+        DELETE FROM countries
+        WHERE id = @id
+        """,
+        connection
+    );
+
+    command.Parameters.AddWithValue("id", id);
+
+    var rowsDeleted = await command.ExecuteNonQueryAsync();
+
+    if (rowsDeleted == 0)
     {
         return Results.NotFound();
     }
-    //If it exists → remove it
-    countries.Remove(country);
-    //Successful deletion → 204
+
     return Results.NoContent();
 });
 
@@ -77,7 +173,7 @@ app.Run();
 
 class Country
 {
-    public int Id { get; set; }
-    public string Name { get; set; }
-    public string Capital { get; set; }
+    public long Id { get; set; }
+    public required string Name { get; set; }
+    public required string Capital { get; set; }
 }
