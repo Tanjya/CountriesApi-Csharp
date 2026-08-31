@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Countries API</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <main class="container">
+
+        <header>
+            <h1>Countries</h1>
+            <p>Explore and add countries and their capitals.</p>
+        </header>
+
+        <section class="add-country">
+            <h2>Add a country</h2>
+
+            <form id="country-form">
+
+                <label for="country-name">Country name</label>
+                <input
+                    type="text"
+                    id="country-name"
+                    placeholder="e.g. Algeria"
+                    required
+                >
+
+                <label for="country-capital">Capital</label>
+                <input
+                    type="text"
+                    id="country-capital"
+                    placeholder="e.g. Algiers"
+                    required
+                >
+
+                <button type="submit">
+                    Add Country
+                </button>
+
+            </form>
+        </section>
+
+        <section class="countries-section">
+
+            <div class="section-heading">
+                <h2>Countries</h2>
+                <span id="country-count"></span>
+            </div>
+
+            <!-- Countries loaded from the API are displayed here -->
+            <div id="countries" class="country-grid"></div>
+
+        </section>
+
+    </main>
+
+    <script src="script.js"></script>
+
+</body>
+</html>
