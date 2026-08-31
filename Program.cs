@@ -38,6 +38,38 @@ app.MapPost("/countries", (Country newCountry) =>
     return Results.Created($"/countries/{newCountry.Id}", newCountry);
 });
 
+//Update an existing country by ID
+app.MapPut("/countries/{id}", (int id, Country updatedCountry) =>
+{
+    var country = countries.FirstOrDefault(country => country.Id == id);
+
+    if (country == null)
+    {
+        return Results.NotFound();
+    }
+
+    country.Name = updatedCountry.Name;
+    country.Capital = updatedCountry.Capital;
+
+    return Results.Ok(country);
+});
+
+
+app.MapDelete("/countries/{id}", (int id) =>
+{
+    //Find the country with this ID
+    var country = countries.FirstOrDefault(country => country.Id == id);
+
+    //If it doesn't exist → 404
+    if (country == null)
+    {
+        return Results.NotFound();
+    }
+    //If it exists → remove it
+    countries.Remove(country);
+    //Successful deletion → 204
+    return Results.NoContent();
+});
 
 
 app.Run();
